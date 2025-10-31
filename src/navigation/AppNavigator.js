@@ -22,7 +22,6 @@ export default function AppNavigator() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Escuchar si el usuario está logueado o no
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -47,12 +46,9 @@ export default function AppNavigator() {
         ) : (
           // Stack público (no logueado)
           <>
-            {/*Primero mostramos el Login */}
             <Stack.Screen name="Welcome" component={WelcomeScreen} />
             <Stack.Screen name="Login" component={LoginScreen} />
             <Stack.Screen name="Recuperar" component={RecuperarScreen} />
-
-
           </>
         )}
       </Stack.Navigator>

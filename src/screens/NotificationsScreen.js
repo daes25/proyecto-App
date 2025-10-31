@@ -1,73 +1,112 @@
-import React, { useState } from "react";
-import { View, Text, FlatList, StyleSheet, TouchableOpacity } from "react-native";
+import React, { useEffect, useState } from "react";
+import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet } from "react-native";
 import { Ionicons, AntDesign, MaterialIcons } from "@expo/vector-icons";
+import { auth, db } from "../services/firebaseConfig";
+import { collection, query, orderBy, onSnapshot, updateDoc, doc, getDoc } from "firebase/firestore";
 
 export default function NotificationsScreen({ navigation }) {
+  const [notifications, setNotifications] = useState([]);
   const [activeScreen, setActiveScreen] = useState("notifications");
+  const currentUserId = auth.currentUser.uid;
 
-  // 🔹 Datos de ejemplo
-  const notifications = [
-    { id: "1", section: "Recientes", text: "Se solucionó un problema en la app.", type: "info", time: "1 h" },
-    { id: "2", section: "Recientes", text: "Carlos comenzó a seguirte.", type: "follow", time: "2 h" },
-    { id: "3", section: "Recientes", text: "Ana comentó tu publicación.", type: "comment", time: "3 h" },
-    { id: "4", section: "Esta semana", text: "Laura le dio me gusta a tu foto.", type: "like", time: "2 d" },
-  ];
+  useEffect(() => {
+    const q = query(
+      collection(db, "users", currentUserId, "notifications"),
+      orderBy("creadoEn", "desc")
+    );
 
-  // 🔹 Agrupar por sección
-  const groupedNotifications = notifications.reduce((groups, item) => {
-    const section = item.section;
-    if (!groups[section]) groups[section] = [];
-    groups[section].push(item);
-    return groups;
-  }, {});
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      const notifs = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data();
 
-  // 🔹 Navbar navigation handler
+          // Traer info del usuario que generó la notificación
+          let remitenteNombre = "Usuario";
+          let remitenteFoto = null;
+          if (data.remitenteId) {
+            const remitenteRef = doc(db, "profiles", data.remitenteId);
+            const remitenteSnap = await getDoc(remitenteRef);
+            if (remitenteSnap.exists()) {
+              remitenteNombre = remitenteSnap.data().name || "Usuario";
+              remitenteFoto = remitenteSnap.data().photo || null;
+            }
+          }
+
+          return {
+            id: docSnap.id,
+            tipo: data.tipo,
+            contenido: data.contenido,
+            remitenteNombre,
+            remitenteFoto,
+            leido: data.leido,
+            postId: data.postId,
+            creadoEn: data.creadoEn?.toDate ? data.creadoEn.toDate() : null,
+          };
+        })
+      );
+
+      setNotifications(notifs);
+    });
+
+    return unsubscribe;
+  }, []);
+
+  const markAsRead = async (id) => {
+    await updateDoc(doc(db, "users", currentUserId, "notifications", id), { leido: true });
+  };
+
   const handleNav = (screen) => {
     setActiveScreen(screen);
-    if (screen === "home") navigation.replace("Home");
-    else if (screen === "search") navigation.replace("Search");
-    else if (screen === "create") navigation.replace("Create");
-    else if (screen === "notifications") navigation.replace("Notifications");
-    else if (screen === "profilepreview") navigation.replace("ProfilePreview");
+    if (screen === "home") navigation.navigate("Home");
+    else if (screen === "search") navigation.navigate("Search");
+    else if (screen === "create") navigation.navigate("Create");
+    else if (screen === "notifications") return;
+    else if (screen === "profilepreview") navigation.navigate("ProfilePreview", { userId: currentUserId });
   };
 
   return (
     <View style={styles.container}>
-      {/* 🔹 Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Notificaciones</Text>
       </View>
 
-      {/* 🔹 Lista de notificaciones */}
       <FlatList
-        data={Object.keys(groupedNotifications)}
-        keyExtractor={(item) => item}
-        renderItem={({ item: section }) => (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{section}</Text>
-            {groupedNotifications[section].map((notif) => (
-              <View key={notif.id} style={styles.notification}>
-                <Ionicons
-                  name="person-circle-outline"
-                  size={40}
-                  color="#ccc"
-                  style={styles.avatar}
-                />
+        data={notifications}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ padding: 10, paddingBottom: 70 }}
+        renderItem={({ item }) => (
+          <TouchableOpacity
+            onPress={() => markAsRead(item.id)}
+            style={[
+              styles.notification,
+              !item.leido && { backgroundColor: "#e6f0ff", padding: 10, borderRadius: 8 },
+            ]}
+          >
+            {item.remitenteFoto ? (
+              <Image source={{ uri: item.remitenteFoto }} style={{ width: 40, height: 40, borderRadius: 20, marginRight: 10 }} />
+            ) : (
+              <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#ccc", marginRight: 10 }} />
+            )}
 
-                <View style={styles.textContainer}>
-                  <Text style={styles.text}>{notif.text}</Text>
-                  <Text style={styles.time}>{notif.time}</Text>
-                </View>
-
-                {notif.type === "follow" && (
-                  <TouchableOpacity style={styles.followBtn}>
-                    <Text style={styles.followText}>Seguir</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            ))}
-          </View>
+            <View style={styles.textContainer}>
+              <Text style={styles.text}>
+                <Text style={{ fontWeight: "bold" }}>{item.remitenteNombre}</Text>{" "}
+                {item.tipo === "comment"
+                  ? "comentó en tu publicación:"
+                  : item.tipo === "reply"
+                  ? "respondió a tu comentario:"
+                  : "notificación"}
+              </Text>
+              <Text style={styles.text}>{item.contenido}</Text>
+              <Text style={styles.time}>{item.creadoEn ? item.creadoEn.toLocaleString() : ""}</Text>
+            </View>
+          </TouchableOpacity>
         )}
+        ListEmptyComponent={
+          <Text style={{ textAlign: "center", marginTop: 20, color: "#888" }}>
+            No hay notificaciones
+          </Text>
+        }
       />
 
       {/* 🔹 Navbar inferior */}
@@ -130,19 +169,9 @@ const styles = StyleSheet.create({
   section: { marginBottom: 15, paddingHorizontal: 10 },
   sectionTitle: { fontWeight: "bold", fontSize: 15, marginBottom: 8, color: "#444" },
   notification: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  avatar: { marginRight: 10 },
   textContainer: { flex: 1 },
   text: { fontSize: 14, color: "#000" },
   time: { fontSize: 12, color: "gray", marginTop: 2 },
-  followBtn: {
-    backgroundColor: "#1D9BF0",
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderRadius: 5,
-    marginLeft: 10,
-  },
-  followText: { color: "#fff", fontWeight: "600" },
-
   navBar: {
     position: "absolute",
     bottom: 0,
