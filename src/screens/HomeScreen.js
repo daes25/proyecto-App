@@ -1,11 +1,38 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, Alert, ActivityIndicator, RefreshControl } from "react-native";
-import { Feather, FontAwesome, Ionicons, AntDesign, MaterialIcons } from "@expo/vector-icons";
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  Image,
+  Alert,
+  ActivityIndicator,
+  RefreshControl,
+  Dimensions,
+  SafeAreaView,
+} from "react-native";
+import {
+  Feather,
+  FontAwesome,
+  Ionicons,
+  MaterialIcons,
+} from "@expo/vector-icons";
 import { Video } from "expo-av";
 import { auth, db } from "../services/firebaseConfig";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, collection, query, orderBy, onSnapshot, deleteDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  deleteDoc,
+} from "firebase/firestore";
 import { useFocusEffect } from "@react-navigation/native";
+
+const { width } = Dimensions.get("window");
 
 export default function HomeScreen({ navigation }) {
   const [tweets, setTweets] = useState([]);
@@ -19,12 +46,10 @@ export default function HomeScreen({ navigation }) {
     if (user) setCurrentUserId(user.uid);
   }, []);
 
-  // 🔹 Cargar publicaciones con imágenes Base64
   const loadPosts = async () => {
     try {
       setLoading(true);
       const q = query(collection(db, "posts"), orderBy("creadoEn", "desc"));
-
       const unsubscribe = onSnapshot(q, async (snapshot) => {
         const fetchedPosts = await Promise.all(
           snapshot.docs.map(async (docSnap) => {
@@ -37,7 +62,6 @@ export default function HomeScreen({ navigation }) {
               if (profileSnap.exists()) authorData = profileSnap.data();
             }
 
-            // 🔸 Convertir Base64 en URI legible por React Native
             let mediaUri = null;
             if (postData.mediaBase64 && postData.mediaType === "image") {
               mediaUri = `data:image/jpeg;base64,${postData.mediaBase64}`;
@@ -53,7 +77,6 @@ export default function HomeScreen({ navigation }) {
             };
           })
         );
-
         setTweets(fetchedPosts);
         setLoading(false);
         setRefreshing(false);
@@ -89,7 +112,11 @@ export default function HomeScreen({ navigation }) {
     setTweets((prevTweets) =>
       prevTweets.map((tweet) =>
         tweet.id === id
-          ? { ...tweet, liked: !tweet.liked, likes: tweet.liked ? tweet.likes - 1 : tweet.likes + 1 }
+          ? {
+              ...tweet,
+              liked: !tweet.liked,
+              likes: tweet.liked ? tweet.likes - 1 : (tweet.likes || 0) + 1,
+            }
           : tweet
       )
     );
@@ -115,12 +142,10 @@ export default function HomeScreen({ navigation }) {
   const handleNav = (screen) => {
     setActiveScreen(screen);
     if (screen === "create") navigation.navigate("Create");
-    else if (screen === "profilepreview") navigation.navigate("ProfilePreview", { userId: currentUserId });
+    else if (screen === "profilepreview")
+      navigation.navigate("ProfilePreview", { userId: currentUserId });
     else if (screen === "logout") handleLogout();
-    else {
-      const screenName = screen.charAt(0).toUpperCase() + screen.slice(1);
-      navigation.navigate(screenName);
-    }
+    else navigation.navigate(screen.charAt(0).toUpperCase() + screen.slice(1));
   };
 
   const handleLogout = async () => {
@@ -142,8 +167,15 @@ export default function HomeScreen({ navigation }) {
     return (
       <Image
         source={{ uri }}
-        style={{ width: "100%", aspectRatio, borderRadius: 10, marginVertical: 5 }}
-        resizeMode="contain"
+        style={{
+          width: width - 30,
+          height: undefined,
+          aspectRatio,
+          borderRadius: 12,
+          marginTop: 10,
+          alignSelf: "center",
+        }}
+        resizeMode="cover"
       />
     );
   };
@@ -152,131 +184,216 @@ export default function HomeScreen({ navigation }) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#1D9BF0" />
-        <Text style={styles.loadingText}>Cargando información...</Text>
+        <Text style={styles.loadingText}>Cargando publicaciones...</Text>
       </View>
     );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <SafeAreaView style={styles.container}>
+      {/* Header fijo */}
+      <View style={styles.fixedHeader}>
         <Text style={styles.appName}>SafeTweet</Text>
+        <TouchableOpacity
+          style={styles.searchBar}
+          onPress={() => navigation.navigate("Search")}
+        >
+          <Feather name="search" size={20} color="#aaa" />
+          <Text style={styles.fakeInput}>Buscar en SafeTweet</Text>
+        </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.searchBar} onPress={() => navigation.navigate("Search")}>
-        <Feather name="search" size={20} color="#aaa" />
-        <Text style={styles.fakeInput}>Buscar en SafeTweet</Text>
-      </TouchableOpacity>
-
-      <View style={styles.centerContent}>
-        {tweets.length === 0 ? (
-          <Text style={styles.noTweets}>Aún no hay publicaciones. ¡Crea la primera!</Text>
-        ) : (
-          <FlatList
-            data={tweets}
-            keyExtractor={(item) => item.id}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={["#1D9BF0"]} />}
-            renderItem={({ item }) => (
-              <View style={styles.tweet}>
-                <View style={styles.userInfo}>
+      {/* Lista de publicaciones */}
+      <FlatList
+        data={tweets}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.postsList}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={["#1D9BF0"]}
+          />
+        }
+        renderItem={({ item, index }) => (
+          <>
+            <View style={[styles.tweetCard, index === 0 && { marginTop: 130 }]}>
+              <View style={styles.userInfo}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
                   {item.autorFoto ? (
-                    <Image
-                      source={{ uri: item.autorFoto }}
-                      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: "#ccc" }}
-                    />
+                    <Image source={{ uri: item.autorFoto }} style={styles.userImage} />
                   ) : (
                     <Feather name="user" size={40} color="#bbb" />
                   )}
-                  <View style={{ marginLeft: 8, flex: 1 }}>
-                    <TouchableOpacity onPress={() => navigation.navigate("ProfilePreview", { userId: item.usuarioId })}>
-                      <Text style={styles.username}>{item.autorNombre}</Text>
-                      <Text style={styles.handle}>@{item.autorNombre}</Text>
-                    </TouchableOpacity>
+                  <View style={{ marginLeft: 8 }}>
+                    <Text style={styles.username}>{item.autorNombre}</Text>
+                    <Text style={styles.handle}>@{item.autorNombre}</Text>
                   </View>
-                  {item.usuarioId === currentUserId && (
-                    <TouchableOpacity onPress={() => handleDeletePost(item.id)}>
-                      <Feather name="trash-2" size={22} color="red" />
-                    </TouchableOpacity>
-                  )}
                 </View>
 
-                {item.contenido ? <Text style={styles.content}>{item.contenido}</Text> : null}
-                {item.mediaType === "image" && item.media && <RenderImage uri={item.media} />}
-                {item.mediaType === "video" && item.media && (
-                  <Video
-                    source={{ uri: item.media }}
-                    style={{ width: "100%", height: 250, borderRadius: 10, marginVertical: 5, backgroundColor: "black" }}
-                    useNativeControls
-                    resizeMode="contain"
-                  />
+                {item.usuarioId === currentUserId && (
+                  <TouchableOpacity onPress={() => handleDeletePost(item.id)}>
+                    <Feather name="trash-2" size={22} color="red" />
+                  </TouchableOpacity>
                 )}
-                <Text style={styles.likes}>{item.likes || 0} Likes</Text>
-                <View style={styles.actions}>
-                  <Feather name="message-circle" size={20} color="gray" />
-                  <Feather name="repeat" size={20} color="gray" />
+              </View>
+
+              {item.contenido ? (
+                <Text style={styles.content}>{item.contenido}</Text>
+              ) : null}
+
+              {item.mediaType === "image" && item.media && <RenderImage uri={item.media} />}
+              {item.mediaType === "video" && item.media && (
+                <Video
+                  source={{ uri: item.media }}
+                  style={styles.video}
+                  useNativeControls
+                  resizeMode="contain"
+                />
+              )}
+
+              <View style={styles.actions}>
+                <TouchableOpacity>
+                  <Feather name="repeat" size={22} color="gray" />
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => toggleLike(item.id)}>
                   <FontAwesome
                     name={item.liked ? "heart" : "heart-o"}
-                    size={20}
+                    size={22}
                     color={item.liked ? "#e0245e" : "gray"}
-                    onPress={() => toggleLike(item.id)}
                   />
-                  <Feather name="share" size={20} color="gray" />
-                </View>
+                </TouchableOpacity>
+                <TouchableOpacity>
+                  <Feather name="download" size={22} color="gray" />
+                </TouchableOpacity>
+                <TouchableOpacity>
+                  <Ionicons name="bookmark-outline" size={22} color="gray" />
+                </TouchableOpacity>
               </View>
-            )}
-          />
-        )}
-      </View>
 
-      {/* 🔹 Navbar */}
+              <Text style={styles.likes}>{item.likes || 0} Me gusta</Text>
+            </View>
+
+            {/* Línea divisoria con círculos */}
+            <View style={styles.separatorContainer}>
+              <View style={styles.circle} />
+              <View style={styles.line} />
+              <View style={styles.circle} />
+            </View>
+          </>
+        )}
+      />
+
+      {/* Navbar */}
       <View style={styles.navBar}>
         <TouchableOpacity onPress={() => handleNav("home")}>
-          <Ionicons name="home-outline" size={26} color={activeScreen === "home" ? "#1D9BF0" : "#000000"} />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleNav("search")}>
-          <AntDesign name="search1" size={24} color={activeScreen === "search" ? "#1D9BF0" : "#000000"} />
+          <Ionicons
+            name="home-outline"
+            size={26}
+            color={activeScreen === "home" ? "#1D9BF0" : "#000"}
+          />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleNav("create")}>
-          <MaterialIcons name="add-circle-outline" size={30} color={activeScreen === "create" ? "#1D9BF0" : "#000000"} />
+          <MaterialIcons
+            name="add-circle-outline"
+            size={30}
+            color={activeScreen === "create" ? "#1D9BF0" : "#000"}
+          />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleNav("notifications")}>
-          <Ionicons name="notifications-outline" size={24} color={activeScreen === "notifications" ? "#1D9BF0" : "#000000"} />
+          <Ionicons
+            name="notifications-outline"
+            size={24}
+            color={activeScreen === "notifications" ? "#1D9BF0" : "#000"}
+          />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleNav("profilepreview")}>
-          <Ionicons name="person-circle-outline" size={26} color={activeScreen === "profilepreview" ? "#1D9BF0" : "#000000"} />
+          <Ionicons
+            name="person-circle-outline"
+            size={26}
+            color={activeScreen === "profilepreview" ? "#1D9BF0" : "#000"}
+          />
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleNav("logout")}>
           <MaterialIcons name="logout" size={26} color="#e0245e" />
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#fff" },
-  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center", backgroundColor: "#fff" },
-  loadingText: { marginTop: 10, color: "gray", fontSize: 16 },
-  header: { paddingTop: 50, paddingBottom: 10, alignItems: "center", borderBottomWidth: 1, borderColor: "#eee" },
-  appName: { fontSize: 24, fontWeight: "bold", color: "#1D9BF0" },
+  fixedHeader: {
+    backgroundColor: "#fff",
+    paddingTop: 50,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderColor: "#eee",
+    alignItems: "center",
+    position: "absolute",
+    top: 0,
+    width: "100%",
+    zIndex: 1000,
+  },
+  appName: {
+    fontSize: 26,
+    fontWeight: "bold",
+    color: "#1D9BF0",
+    marginBottom: 8,
+  },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    margin: 10,
     backgroundColor: "#f1f1f1",
     borderRadius: 25,
-    paddingHorizontal: 10,
-    height: 40,
+    paddingHorizontal: 12,
+    height: 42,
+    width: "90%",
   },
   fakeInput: { color: "#aaa", marginLeft: 10, fontSize: 14 },
-  centerContent: { flex: 1 },
-  noTweets: { textAlign: "center", marginTop: 10, color: "gray" },
-  tweet: { borderTopWidth: 0.5, borderColor: "#ddd", paddingHorizontal: 15, paddingVertical: 10 },
-  userInfo: { flexDirection: "row", alignItems: "center", marginBottom: 5 },
-  username: { fontWeight: "bold" },
+  postsList: {
+    paddingTop: 20,
+    paddingBottom: 60,
+  },
+  tweetCard: {
+    backgroundColor: "#fff",
+    marginBottom: 8,
+    marginHorizontal: 10,
+    padding: 12,
+    borderRadius: 12,
+    shadowColor: "#000",
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  userInfo: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  userImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#ccc",
+  },
+  username: { fontWeight: "bold", fontSize: 15 },
   handle: { color: "gray", fontSize: 12 },
-  content: { fontSize: 16, marginBottom: 5 },
-  likes: { fontWeight: "bold", marginBottom: 5 },
-  actions: { flexDirection: "row", justifyContent: "space-around", marginTop: 5 },
+  content: { marginTop: 8, fontSize: 15, color: "#333" },
+  video: {
+    width: width - 30,
+    height: 280,
+    borderRadius: 12,
+    marginTop: 10,
+    backgroundColor: "#000",
+    alignSelf: "center",
+  },
+  actions: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 10,
+  },
+  likes: { marginTop: 4, color: "gray", textAlign: "right", fontSize: 13 },
   navBar: {
     position: "absolute",
     bottom: 0,
@@ -285,8 +402,28 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     paddingVertical: 10,
-    borderTopWidth: 2,
+    borderTopWidth: 1,
     borderColor: "#ddd",
     backgroundColor: "#fff",
   },
+  separatorContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginVertical: 6,
+  },
+  circle: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#1D9BF0",
+  },
+  line: {
+    width: "80%",
+    height: 1,
+    backgroundColor: "#1D9BF0",
+    marginHorizontal: 5,
+  },
+  loadingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { color: "gray", fontSize: 16, marginTop: 10 },
 });
