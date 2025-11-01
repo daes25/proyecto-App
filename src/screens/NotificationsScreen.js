@@ -91,13 +91,22 @@ export default function NotificationsScreen({ navigation }) {
             <View style={styles.textContainer}>
               <Text style={styles.text}>
                 <Text style={{ fontWeight: "bold" }}>{item.remitenteNombre}</Text>{" "}
+
+                {/* --- MODIFICADO ---: Se añade el caso para "like" */}
                 {item.tipo === "comment"
                   ? "comentó en tu publicación:"
                   : item.tipo === "reply"
-                  ? "respondió a tu comentario:"
-                  : "notificación"}
+                    ? "respondió a tu comentario:"
+                    : item.tipo === "like"
+                      ? "le ha gustado tu publicación."
+                      : "notificación"}
               </Text>
-              <Text style={styles.text}>{item.contenido}</Text>
+
+              {/* --- MODIFICADO ---: Se oculta el contenido si es un 'like' */}
+              {item.tipo !== "like" && (
+                <Text style={styles.text}>{item.contenido}</Text>
+              )}
+
               <Text style={styles.time}>{item.creadoEn ? item.creadoEn.toLocaleString() : ""}</Text>
             </View>
           </TouchableOpacity>
@@ -124,7 +133,7 @@ export default function NotificationsScreen({ navigation }) {
             name="search1"
             size={24}
             color={activeScreen === "search" ? "#1D9BF0" : "#000000"}
-          />
+            á />
         </TouchableOpacity>
 
         <TouchableOpacity onPress={() => handleNav("create")}>
